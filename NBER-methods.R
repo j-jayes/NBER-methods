@@ -67,6 +67,9 @@ df <- papers %>%
     filter(between(row_num, 0, 12)) %>%
     mutate(abstract = map(paper, possibly(get_abstract, "failed")))
 
+#' 
+#' 
+## -----------------------------------------------------------------------------
 df %>% write_rds("data/abstracts_df.rds")
 
 
