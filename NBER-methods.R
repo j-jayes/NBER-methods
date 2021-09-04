@@ -64,7 +64,7 @@ get_abstract <- function(paper){
 ## -----------------------------------------------------------------------------
 df <- papers %>% 
     mutate(row_num = row_number()) %>% 
-    filter(between(row_num, 0, 200)) %>%
+    # filter(between(row_num, 0, 200)) %>%
     mutate(abstract = map(paper, possibly(get_abstract, "failed")))
 
 #' 
