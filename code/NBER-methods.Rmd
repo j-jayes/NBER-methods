@@ -71,7 +71,7 @@ df <- papers %>%
 
 ```{r}
 
-df <- "hello"
+# df <- "hello"
 
 df %>% write_rds("data/abstracts_df.rds")
 
