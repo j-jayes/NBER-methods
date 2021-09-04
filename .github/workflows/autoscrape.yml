@@ -35,7 +35,7 @@ jobs:
         git pull
         git add data/*
         git commit -am "NICE! GH ACTION Autorun $(date)"
-        git push origin master
+        git push origin main
       env:
         REPO_KEY: ${{secrets.GITHUB_TOKEN}}
         username: github-actions
