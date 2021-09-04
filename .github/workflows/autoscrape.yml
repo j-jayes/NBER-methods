@@ -3,8 +3,8 @@ name: autoscrape
 
 # Controls when the action will run.
 on:
-  push:
-    branches: main
+  schedule:
+    cron: *1
 
 jobs:
   autoscrape:
