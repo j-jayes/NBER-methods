@@ -48,6 +48,8 @@ get_abstract <- function(paper){
     
     url <- glue("https://www.nber.org/papers/", paper)
     
+    message(glue("Getting abstract from Working Paper {paper}"))
+    
     text <- read_html(url) %>% 
     html_node("p") %>% 
     html_text() %>% 
@@ -56,22 +58,22 @@ get_abstract <- function(paper){
     text
 }
 
-
 #' 
 #' Use function
 #' 
 ## -----------------------------------------------------------------------------
 df <- papers %>% 
     mutate(row_num = row_number()) %>% 
-    filter(between(row_num, 0, 10)) %>%
+    filter(between(row_num, 0, 12)) %>%
     mutate(abstract = map(paper, possibly(get_abstract, "failed")))
 
 df %>% write_rds("data/abstracts_df.rds")
 
 
 #' 
+#' Purl it to .R file.
 #' 
 ## -----------------------------------------------------------------------------
-knitr::purl("code/NBER-methods.Rmd", documentation = 2)
+# knitr::purl("code/NBER-methods.Rmd", documentation = 2)
 
 #' 

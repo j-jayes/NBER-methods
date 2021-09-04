@@ -64,13 +64,14 @@ Use function
 ```{r}
 df <- papers %>% 
     mutate(row_num = row_number()) %>% 
-    filter(between(row_num, 0, 10)) %>%
+    filter(between(row_num, 0, 12)) %>%
     mutate(abstract = map(paper, possibly(get_abstract, "failed")))
 
 df %>% write_rds("data/abstracts_df.rds")
 
 ```
 
+Purl it to .R file.
 
 ```{r}
 # knitr::purl("code/NBER-methods.Rmd", documentation = 2)
