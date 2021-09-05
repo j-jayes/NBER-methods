@@ -2,9 +2,9 @@
 name: autoscrape
 
 # Controls when the action will run.
-on:
-  push:
-    branches: main
+#on:
+#  push:
+#    branches: main
 
 jobs:
   autoscrape:
