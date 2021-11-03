@@ -1,0 +1,146 @@
+---
+title: "NBER-methods-post"
+author: "JJayes"
+date: "03/11/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(here)
+library(tidyverse)
+library(gghighlight)
+library(tidyquant)
+theme_set(theme_light())
+```
+
+## Purpose
+
+Visualize trends in NBER paper abstract terms over time.
+
+### Reading in data
+
+We have nearly 30,000 papers.
+
+```{r}
+df <- read_rds(here("data", "abstracts_df.rds")) %>% 
+    unnest(abstract)
+
+df %>% 
+    skimr::skim()
+```
+
+```{r}
+nber_method_plot <- function(terms, smoother) {
+  get_term_share <- function(method) {
+    df %>%
+      mutate(
+        time_lump = year - year %% {{ smoother }},
+        abstract = str_to_lower(abstract)
+      ) %>%
+      count(time_lump, rd = str_detect(abstract, method)) %>%
+      pivot_wider(names_from = rd, values_from = n, values_fill = 0) %>%
+      mutate(share = `TRUE` / (`FALSE` + `TRUE`)) %>%
+      select(time_lump, share)
+  }
+
+  terms %>%
+    as_tibble() %>%
+    rename(method = value) %>%
+    mutate(
+      method = str_to_lower(method),
+      share = map(method, get_term_share)
+    ) %>%
+    unnest(share) %>%
+    mutate(method = str_to_title(method)) %>%
+    ggplot(aes(time_lump, share, colour = method)) +
+    geom_point() +
+    geom_line(cex = 1) +
+    gghighlight(label_params = list(hjust = -.1)) +
+    expand_limits(x = 2030) +
+    scale_y_continuous(labels = scales::percent_format()) +
+    scale_colour_tq(theme = "dark") +
+    labs(
+      x = "Year of most recent revision as NBER paper",
+      colour = "Term",
+      y = "Share of NBER papers with term in abstract",
+      title = "Popular terms in NBER working paper abstracts"
+    )
+}
+```
+
+
+```{r}
+jpeg(filename = here("images", "test_1.jpeg"),
+     height = 6,
+     width = 10,
+     res = 1000,
+     units = "in")
+
+nber_method_plot(c("difference-in-difference", "regression discontinuity", "rct|controlled trial", "dynamic stochastic", "machine learning|big data"), 2)
+
+dev.off()
+
+nber_method_plot(c("difference-in-difference", 
+                   "regression discontinuity", 
+                   "rct|controlled trial", 
+                   "dynamic stochastic", 
+                   "machine learning|big data"), 2)
+
+nber_method_plot(c("micro", "macro"), 2)
+
+nber_method_plot(c("money", "unemployment", "interest rates"), 2)
+
+
+
+nber_method_plot(c("growth", "development", "poverty"), 2) +
+    scale_colour_tq(theme = "green")
+
+
+df_1 <- nber_method_plot_1(c("difference-in-difference", 
+                   "regression discontinuity", 
+                   "rct|controlled trial", 
+                   "dynamic stochastic", 
+                   "machine learning|big data"), 2)
+```
+
+
+```{r}
+nber_method_plot_1 <- function(terms, smoother) {
+  get_term_share <- function(method) {
+    df %>%
+      mutate(
+        time_lump = year - year %% {{ smoother }},
+        abstract = str_to_lower(abstract)
+      ) %>%
+      count(time_lump, rd = str_detect(abstract, method)) %>%
+      pivot_wider(names_from = rd, values_from = n, values_fill = 0) %>%
+      mutate(share = `TRUE` / (`FALSE` + `TRUE`)) %>%
+      select(time_lump, share)
+  }
+
+  terms %>%
+    as_tibble() %>%
+    rename(method = value) %>%
+    mutate(
+      method = str_to_lower(method),
+      share = map(method, get_term_share)
+    ) %>%
+    unnest(share)
+}
+
+df_1_labs <- df_1 %>% 
+    filter(time_lump == max(time_lump))
+
+library(ggrepel)
+
+df_1 %>% 
+    ggplot(aes(time_lump, share, colour = method)) +
+    geom_point() +
+    geom_line() +
+    geom_label_repel(aes(label = method), data = df_1_labs, hjust = -.5, show.legend = F) +
+    expand_limits(x = 2030)
+    
+```
+

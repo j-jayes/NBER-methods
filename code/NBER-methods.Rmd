@@ -23,6 +23,14 @@ Try out Ben Davies package and see if I can access the text of the abstracts.
 ```{r}
 papers <- nberwp::papers
 papers
+
+paper_programs <- nberwp::paper_programs
+
+paper_programs <- paper_programs %>% 
+    group_by(paper) %>% 
+    count(program) %>% 
+    ungroup() %>% 
+    pivot_wider(names_from = program, values_from = n, values_fill = 0)
 ```
 
 Nice! Now we have a list of papers - we can construct the URL based on the paper number
@@ -62,10 +70,18 @@ get_abstract <- function(paper){
 Use function
 
 ```{r}
-df <- papers %>% 
-    mutate(row_num = row_number()) %>% 
-    # filter(between(row_num, 0, 200)) %>%
-    mutate(abstract = map(paper, possibly(get_abstract, "failed")))
+# df_2021 <- papers %>% 
+#     mutate(row_num = row_number()) %>% 
+#     filter(year == 2021) %>%
+#     mutate(abstract = map(paper, possibly(get_abstract, "failed")))
+# 
+# df_2021 <- df_2021 %>% 
+#     unnest(abstract)
+# 
+# df %>% 
+#     bind_rows(df_2021) %>% 
+#     distinct(paper, .keep_all = T)
+# df_2021 %>% write_rds("data/2021_data.rds")
 ```
 
 
@@ -73,7 +89,7 @@ df <- papers %>%
 
 # df <- "hello"
 
-df %>% write_rds("data/abstracts_df.rds")
+# df %>% write_rds("data/abstracts_df.rds")
 
 ```
 
@@ -81,5 +97,410 @@ Purl it to .R file.
 
 ```{r}
 # knitr::purl("code/NBER-methods.Rmd", documentation = 2)
+```
+
+
+
+```{r}
+df <- read_rds("data/abstracts_df.rds")
+
+df <- df %>% 
+    unnest(abstract)
+```
+
+Those that failed: why? Webpage 404, not my scraper.
+```{r}
+# df_failed <- df %>% 
+#     filter(abstract == "failed") %>% 
+#     mutate(abstract = map(paper, possibly(get_abstract, "failed")))
+
+```
+
+### Analysis
+
+Begin by looking at the most common words:
+
+```{r}
+library(tidytext)
+
+df_words <- df %>% 
+    unnest_tokens(word, abstract) %>% 
+    anti_join(stop_words)
+
+df_words %>% 
+    count(word, sort = T) %>% 
+    head(50) %>% 
+    mutate(word = fct_reorder(word, n)) %>% 
+    ggplot(aes(n, word)) +
+    geom_col()
+```
+
+Want to bind log odds by 3 or 5 year chunk I think and then see most specific words.
+
+```{r}
+df_words %>% 
+    mutate(decade = year - year %% 10) %>% 
+    count(decade, word, sort = T) %>% 
+    group_by(decade) %>% 
+    slice_max(n, n = 6) %>% 
+    ungroup() %>% 
+    mutate(word = reorder_within(word, n, decade)) %>% 
+    ggplot(aes(n, word, fill = decade)) +
+    geom_col(show.legend = F) +
+    scale_y_reordered() +
+    facet_wrap(~ decade, scales = "free_y")
+```
+
+
+```{r}
+# df %>% 
+#     filter(str_detect(abstract, "difference")) %>% view()
+# 
+# df %>% 
+#     filter(str_detect(abstract, "diff-in-diff")) %>% view()
+# 
+# df %>% 
+#     filter(str_detect(abstract, "regression discontinuity")) %>% view()
+# 
+# df %>% 
+#     filter(str_detect(abstract, "matching")) %>% view()
+# 
+# 
+# df %>% 
+#     count(year) %>% 
+#     ggplot(aes(year, n)) +
+#     geom_line() +
+#     geom_point()
+# 
+# df %>% 
+#     mutate(decade = year + year %% 5) %>%
+#     count(decade, rd = str_detect(abstract, "regression discontinuity")) %>% 
+#     ggplot(aes(decade, n, fill = rd)) +
+#     geom_area(position = "fill")
+```
+
+
+```{r}
+plot_method <- function(method){
+    
+    df %>% 
+    mutate(decade = year - year %% 3,
+           abstract = str_to_lower(abstract)) %>%
+    count(decade, rd = str_detect(abstract, method)) %>% 
+    ggplot(aes(decade, n, fill = rd)) +
+    geom_area(position = "fill")
+    
+}
+
+plot_method("difference-in-differences")
+
+plot_method("machine learning")
+
+plot_method("big data")
+
+plot_method("experiments")
+
+plot_method("rct")
+
+plot_method("randomized control")
+
+plot_method("laboratory")
+
+
+# df %>% 
+#     mutate(decade = year + year %% 5) %>% 
+#     count(decade)
+
+```
+
+### Function to count share
+
+```{r}
+
+plot_method_share <- function(method) {
+  df %>%
+    mutate(
+      decade = year - year %% 3,
+      abstract = str_to_lower(abstract)
+    ) %>%
+    count(decade, rd = str_detect(abstract, method)) %>%
+    pivot_wider(names_from = rd, values_from = n, values_fill = 0) %>%
+    mutate(share = `TRUE` / (`FALSE` + `TRUE`)) %>%
+    ggplot(aes(decade, share)) +
+    geom_point() +
+    geom_line() +
+    scale_y_continuous(labels = scales::percent_format()) +
+    labs(title = glue("Share of {method} in NBER abstracts"),
+         x = NULL,
+         y = NULL)
+}
+
+plot_method_share("difference-in-difference")
+plot_method_share("regression discontinuity")
+plot_method_share("laboratory|experiments")
+plot_method_share("rct")
+plot_method_share("dynamic stochastic")
+plot_method_share("general equilibrium")
+plot_method_share("machine learning|big data")
+
+
+```
+
+
+### What about persistence and path dependence?
+
+What do we mean in economics when we talk about persistence?
+
+```{r}
+df %>% 
+    mutate(abstract = str_to_lower(abstract)) %>% 
+    filter(str_detect(abstract, "path depen"))
+
+persistent_words <- df %>% 
+    mutate(abstract = str_to_lower(abstract)) %>% 
+    filter(str_detect(abstract, "persistence"))
+```
+
+
+```{r}
+library(tidytext)
+library(igraph)
+library(ggraph)
+
+persistent_words_bigrams <- persistent_words %>%
+    unnest_tokens(bigram, abstract, token = "ngrams", n = 2) %>%
+    separate(bigram, c("word1", "word2"), sep = " ") %>%
+    filter(!word1 %in% stop_words$word,
+           !word2 %in% stop_words$word,
+           word1 == "persistence") %>%
+    count(word1, word2, sort = TRUE)
+
+visualize_bigrams <- function(bigrams) {
+  set.seed(2016)
+  a <- grid::arrow(type = "closed", length = unit(.15, "inches"))
+  
+  bigrams %>%
+    graph_from_data_frame() %>%
+    ggraph(layout = "fr") +
+    geom_edge_link(aes(edge_alpha = n), show.legend = FALSE, arrow = a) +
+    geom_node_point(color = "lightblue", size = 5) +
+    geom_node_text(aes(label = name), vjust = 1, hjust = 1) +
+    theme_void()
+}
+```
+
+```{r}
+# visualize_bigrams(persistent_words_bigrams %>% 
+#                     filter(n > 10))
+
+visualize_bigrams(persistent_words_bigrams)
+```
+
+## Goal
+
+Make a vis of the different methods over time, want it to take a list of terms as the input
+
+```{r}
+plot_method_share <- function(method) {
+  df %>%
+    mutate(
+      decade = year - year %% 3,
+      abstract = str_to_lower(abstract)
+    ) %>%
+    count(decade, rd = str_detect(abstract, method)) %>%
+    pivot_wider(names_from = rd, values_from = n, values_fill = 0) %>%
+    mutate(share = `TRUE` / (`FALSE` + `TRUE`)) %>%
+    ggplot(aes(decade, share)) +
+    geom_point() +
+    geom_line() +
+    scale_y_continuous(labels = scales::percent_format()) +
+    labs(title = glue("Share of {method} in NBER abstracts"),
+         x = NULL,
+         y = NULL)
+}
+
+
+plot_method_share("covid")
+```
+
+
+```{r}
+get_term_share <- function(method) {
+  df %>%
+    mutate(
+      decade = year - year %% 1,
+      abstract = str_to_lower(abstract)
+    ) %>%
+    count(decade, rd = str_detect(abstract, method)) %>%
+    pivot_wider(names_from = rd, values_from = n, values_fill = 0) %>%
+    mutate(share = `TRUE` / (`FALSE` + `TRUE`)) %>%
+    select(decade, share)
+}
+
+mts <- tibble(method = c("difference-in-difference", "regression discontinuity", "rct|controlled trial", "dynamic stochastic", "machine learning|big data"))
+
+mts %>% 
+    mutate(share = map(method, get_term_share)) %>% 
+    unnest(share) %>% 
+    ggplot(aes(decade, share, colour = method)) +
+    geom_point() +
+    geom_line() +
+    scale_y_continuous(labels = scales::percent_format()) +
+    labs(x = "Year of most recent revision as NBER paper",
+         colour = "Term",
+         y = "Share of NBER papers with term in abstract",
+         title = "Popular terms and methods in NBER working paper abstracts")
+```
+
+Big function
+```{r}
+
+nber_method_plot <- function(terms, smoother) {
+  get_term_share <- function(method) {
+    df %>%
+      mutate(
+        time_lump = year - year %% {{ smoother }},
+        abstract = str_to_lower(abstract)
+      ) %>%
+      count(time_lump, rd = str_detect(abstract, method)) %>%
+      pivot_wider(names_from = rd, values_from = n, values_fill = 0) %>%
+      mutate(share = `TRUE` / (`FALSE` + `TRUE`)) %>%
+      select(time_lump, share)
+  }
+
+  terms_df <- terms %>%
+    as_tibble() %>%
+    rename(method = value)
+
+  n_terms <- terms_df %>%
+    count() %>% pull()
+  
+  n_rows <- round((n_terms + 0) / 2)
+
+  terms_df %>%
+    mutate(share = map(method, get_term_share)) %>%
+    unnest(share) %>%
+    ggplot(aes(time_lump, share, colour = method)) +
+    geom_point() +
+    geom_line() +
+    scale_y_continuous(labels = scales::percent_format()) +
+    labs(
+      x = "Year of most recent revision as NBER paper",
+      colour = "Term",
+      y = "Share of NBER papers with term in abstract",
+      title = "Popular terms in NBER working paper abstracts"
+    ) +
+    theme(legend.position = "bottom") +
+    guides(colour = guide_legend(nrow = n_rows, byrow = TRUE))
+}
+
+
+nber_method_plot(c("difference-in-difference", "regression discontinuity", "rct|controlled trial", "dynamic stochastic", "machine learning|big data"), 2)
+```
+
+Fine for now
+
+```{r}
+nber_method_plot <- function(terms, smoother) {
+  get_term_share <- function(method) {
+    df %>%
+      mutate(
+        time_lump = year - year %% {{ smoother }},
+        abstract = str_to_lower(abstract)
+      ) %>%
+      count(time_lump, rd = str_detect(abstract, method)) %>%
+      pivot_wider(names_from = rd, values_from = n, values_fill = 0) %>%
+      mutate(share = `TRUE` / (`FALSE` + `TRUE`)) %>%
+      select(time_lump, share)
+  }
+
+  terms %>%
+    as_tibble() %>%
+    rename(method = value) %>%
+    mutate(share = map(method, get_term_share)) %>%
+    unnest(share) %>%
+    ggplot(aes(time_lump, share, colour = method)) +
+    geom_point() +
+    geom_line() +
+    scale_y_continuous(labels = scales::percent_format()) +
+    labs(
+      x = "Year of most recent revision as NBER paper",
+      colour = "Term",
+      y = "Share of NBER papers with term in abstract",
+      title = "Popular terms in NBER working paper abstracts"
+    )
+}
+
+
+nber_method_plot(c("difference-in-difference", "regression discontinuity", "rct|controlled trial", "dynamic stochastic", "machine learning|big data"), 2)
+```
+
+```{r}
+library(gghighlight)
+
+nber_method_plot <- function(terms, smoother) {
+  get_term_share <- function(method) {
+    df %>%
+      mutate(
+        time_lump = year - year %% {{ smoother }},
+        abstract = str_to_lower(abstract)
+      ) %>%
+      count(time_lump, rd = str_detect(abstract, method)) %>%
+      pivot_wider(names_from = rd, values_from = n, values_fill = 0) %>%
+      mutate(share = `TRUE` / (`FALSE` + `TRUE`)) %>%
+      select(time_lump, share)
+  }
+
+  terms %>%
+    as_tibble() %>%
+    rename(method = value) %>%
+    mutate(
+      method = str_to_lower(method),
+      share = map(method, get_term_share)
+    ) %>%
+    unnest(share) %>%
+    mutate(method = str_to_title(method)) %>%
+    ggplot(aes(time_lump, share, colour = method)) +
+    geom_point() +
+    geom_line(cex = 1) +
+    gghighlight(label_params = list(hjust = -.5)) +
+    expand_limits(x = 2030) +
+    scale_y_continuous(labels = scales::percent_format()) +
+    scale_colour_tq(theme = "dark") +
+    labs(
+      x = "Year of most recent revision as NBER paper",
+      colour = "Term",
+      y = "Share of NBER papers with term in abstract",
+      title = "Popular terms in NBER working paper abstracts"
+    )
+}
+
+
+jpeg(filename = "images/test_1.jpeg",
+     height = 6,
+     width = 8,
+     res = 1000,
+     units = "in")
+
+nber_method_plot(c("difference-in-difference", "regression discontinuity", "rct|controlled trial", "dynamic stochastic", "machine learning|big data"), 2)
+
+dev.off()
+
+nber_method_plot(c("difference-in-difference", 
+                   "regression discontinuity", 
+                   "rct|controlled trial", 
+                   "dynamic stochastic", 
+                   "machine learning|big data"), 2)
+
+nber_method_plot(c("micro", "macro"), 2)
+
+nber_method_plot(c("money", "unemployment", "interest rates"), 2)
+
+
+
+nber_method_plot(c("growth", "development", "poverty"), 2) +
+    scale_colour_tq(theme = "green")
+
+
 ```
 
