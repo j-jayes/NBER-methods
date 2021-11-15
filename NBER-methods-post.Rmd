@@ -10,7 +10,6 @@ knitr::opts_chunk$set(echo = TRUE)
 
 library(here)
 library(tidyverse)
-library(gghighlight)
 library(tidyquant)
 theme_set(theme_light())
 ```
@@ -31,6 +30,10 @@ df %>%
     skimr::skim()
 ```
 
+### Function
+
+Large function to plot the term frequency over time. It has two inputs, a list of terms, and a smoothing factor.
+
 ```{r}
 nber_method_plot <- function(terms, smoother) {
   get_term_share <- function(method) {
@@ -45,7 +48,7 @@ nber_method_plot <- function(terms, smoother) {
       select(time_lump, share)
   }
 
-  terms %>%
+  terms_df <- terms %>%
     as_tibble() %>%
     rename(method = value) %>%
     mutate(
@@ -53,94 +56,112 @@ nber_method_plot <- function(terms, smoother) {
       share = map(method, get_term_share)
     ) %>%
     unnest(share) %>%
-    mutate(method = str_to_title(method)) %>%
+    mutate(method = str_to_title(method))
+
+  terms_df_labs <- terms_df %>%
+    filter(time_lump == max(time_lump))
+  
+  n_terms <- terms_df %>%
+    distinct(method) %>% 
+    count() %>% pull()
+  
+  n_rows <- round((n_terms + 0) / 2)
+
+  terms_df %>%
     ggplot(aes(time_lump, share, colour = method)) +
     geom_point() +
     geom_line(cex = 1) +
-    gghighlight(label_params = list(hjust = -.1)) +
-    expand_limits(x = 2030) +
+    geom_text(aes(label = method),
+      data = terms_df_labs %>%
+        filter(time_lump == max(time_lump)),
+      hjust = -.1,
+      show.legend = F,
+      check_overlap = T
+    ) +
+    expand_limits(x = 2040) +
     scale_y_continuous(labels = scales::percent_format()) +
     scale_colour_tq(theme = "dark") +
     labs(
-      x = "Year of most recent revision as NBER paper",
+      x = "Year of most recent revision as NBER wp",
       colour = "Term",
-      y = "Share of NBER papers with term in abstract",
+      y = "Share of NBER working papers with term in abstract",
       title = "Popular terms in NBER working paper abstracts"
-    )
+    ) +
+    theme(legend.position = "bottom") +
+    guides(colour = guide_legend(nrow = n_rows, byrow = TRUE))
 }
 ```
 
+### Term frequency over time
+
+Let us begin with popular methods, to replicate figure from the economist.
 
 ```{r}
-jpeg(filename = here("images", "test_1.jpeg"),
+jpeg(filename = here("images", "Methods_2021.jpeg"),
      height = 6,
-     width = 10,
+     width = 8,
      res = 1000,
      units = "in")
 
-nber_method_plot(c("difference-in-difference", "regression discontinuity", "rct|controlled trial", "dynamic stochastic", "machine learning|big data"), 2)
-
-dev.off()
-
 nber_method_plot(c("difference-in-difference", 
                    "regression discontinuity", 
-                   "rct|controlled trial", 
+                   "randomized controlled trial", 
                    "dynamic stochastic", 
-                   "machine learning|big data"), 2)
+                   "machine learning|big data"), 2) +
+    theme(legend.position = "none")
 
-nber_method_plot(c("micro", "macro"), 2)
-
-nber_method_plot(c("money", "unemployment", "interest rates"), 2)
-
-
-
-nber_method_plot(c("growth", "development", "poverty"), 2) +
-    scale_colour_tq(theme = "green")
-
-
-df_1 <- nber_method_plot_1(c("difference-in-difference", 
-                   "regression discontinuity", 
-                   "rct|controlled trial", 
-                   "dynamic stochastic", 
-                   "machine learning|big data"), 2)
+dev.off()
 ```
 
+Why do we observe a drop off towards the end of the series??
 
 ```{r}
-nber_method_plot_1 <- function(terms, smoother) {
-  get_term_share <- function(method) {
-    df %>%
-      mutate(
-        time_lump = year - year %% {{ smoother }},
-        abstract = str_to_lower(abstract)
-      ) %>%
-      count(time_lump, rd = str_detect(abstract, method)) %>%
-      pivot_wider(names_from = rd, values_from = n, values_fill = 0) %>%
-      mutate(share = `TRUE` / (`FALSE` + `TRUE`)) %>%
-      select(time_lump, share)
-  }
+jpeg(filename = here("images", "Covid.jpeg"),
+     height = 6,
+     width = 8,
+     res = 1000,
+     units = "in")
 
-  terms %>%
-    as_tibble() %>%
-    rename(method = value) %>%
-    mutate(
-      method = str_to_lower(method),
-      share = map(method, get_term_share)
-    ) %>%
-    unnest(share)
-}
+nber_method_plot(c("covid-19", 
+                   "difference-in-difference", 
+                   "regression discontinuity", 
+                   "randomized controlled trial", 
+                   "dynamic stochastic", 
+                   "machine learning|big data"), 2) +
+    theme(legend.position = "none")
 
-df_1_labs <- df_1 %>% 
-    filter(time_lump == max(time_lump))
-
-library(ggrepel)
-
-df_1 %>% 
-    ggplot(aes(time_lump, share, colour = method)) +
-    geom_point() +
-    geom_line() +
-    geom_label_repel(aes(label = method), data = df_1_labs, hjust = -.5, show.legend = F) +
-    expand_limits(x = 2030)
-    
+dev.off()
 ```
+
+Covid-19! Perhaps not such a surprise, if you're active on twitter.
+
+```{r}
+jpeg(filename = here("images", "Money_interest_unemployment.jpeg"),
+     height = 6,
+     width = 8,
+     res = 1000,
+     units = "in") 
+
+nber_method_plot(c("money", "unemployment", "interest rates"), 2) +
+    theme(legend.position = "none")
+
+dev.off()
+```
+
+What about other trends? A slight downward trend in the focus on growth - good news for [Kate Raworth](https://twitter.com/kateraworth).
+
+```{r}
+jpeg(filename = here("images", "Growth_development_poverty.jpeg"),
+     height = 6,
+     width = 8,
+     res = 1000,
+     units = "in") 
+
+nber_method_plot(c("growth", "development", "poverty"), 2) +
+    scale_colour_tq(theme = "green") +
+    theme(legend.position = "none")
+
+dev.off()
+```
+
 
